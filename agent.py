@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnableLambda
 from langchain_community.chat_message_histories import ChatMessageHistory
 
 from langchain_community.utilities import WikipediaAPIWrapper
@@ -152,12 +153,20 @@ Process:
 
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=verbose)
+    agent_executor_text_output = agent_executor | RunnableLambda(
+        lambda res: {
+            "output": normalize_to_text(res.get("output", res))
+            if isinstance(res, dict)
+            else normalize_to_text(res)
+        }
+    )
 
     agent_with_memory = RunnableWithMessageHistory(
-        agent_executor,
+        agent_executor_text_output,
         get_history,
         input_messages_key="input",
         history_messages_key="chat_history",
+        output_messages_key="output",
     )
 
     return agent_with_memory
