@@ -1,7 +1,6 @@
 # app.py
 import streamlit as st
-from agent import build_agent
-from agent import build_agent, normalize_to_text
+from agent import build_agent, clear_session_memory, normalize_to_text
 
 
 st.set_page_config(page_title="Gemini Web Research Agent", page_icon="🔎", layout="wide")
@@ -48,6 +47,7 @@ with st.sidebar:
     with col2:
         if st.button("🧹 Reset chat", use_container_width=True):
             st.session_state.messages = []
+            clear_session_memory(st.session_state.session_id)
             st.rerun()
 
 # Autocrear agente si hay key y aún no hay agente
@@ -83,7 +83,6 @@ else:
                 {"input": user_text},
                 config={"configurable": {"session_id": st.session_state.session_id}},
             )
-            from agent import normalize_to_text  # o impórtalo arriba del todo
             answer = normalize_to_text(res.get("output", res))
 
         except Exception as e:

@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 
 from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableLambda
 
 from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
@@ -49,20 +49,29 @@ def normalize_to_text(x) -> str:
 @tool
 def today(tz: str = "Europe/Madrid") -> str:
     """Devuelve la fecha de hoy (YYYY-MM-DD) en la zona horaria indicada."""
-    return datetime.now(ZoneInfo(tz)).date().isoformat()
+    try:
+        return datetime.now(ZoneInfo(tz)).date().isoformat()
+    except Exception:
+        return datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
 
 
 @tool
 def now(tz: str = "Europe/Madrid") -> str:
     """Devuelve fecha y hora actual (ISO 8601) en la zona horaria indicada."""
-    return datetime.now(ZoneInfo(tz)).isoformat()
+    try:
+        return datetime.now(ZoneInfo(tz)).isoformat()
+    except Exception:
+        return datetime.now(ZoneInfo("Europe/Madrid")).isoformat()
 
 
 @tool
 def read_url(url: str) -> str:
     """Descarga una URL y devuelve el texto principal (limpio) para poder resumir/citar."""
-    r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
+    try:
+        r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+    except Exception as e:
+        return f"Error leyendo URL: {type(e).__name__}: {e}"
 
     soup = BeautifulSoup(r.text, "html.parser")
     for tag in soup(["script", "style", "header", "footer", "nav", "aside"]):
@@ -72,23 +81,41 @@ def read_url(url: str) -> str:
     return text[:12000]
 
 
-# ✅ DuckDuckGo "robusto": backend lite + captura de JSONDecodeError
-_ddg = DuckDuckGoSearchResults(num_results=8, backend="lite")
+# ---------------- MEMORY STORE ----------------
+_store = {}
 
-@tool
-def web_search(query: str) -> str:
-    """Busca en la web con DuckDuckGo. Devuelve resultados (texto) aunque DDG falle."""
-    try:
-        # DuckDuckGoSearchResults en LC suele devolver str con resultados formateados
-        return _ddg.invoke(query)
-    except json.JSONDecodeError:
-        # típico cuando DDG devuelve vacío / rate-limit / bloqueo
-        return (
-            "DuckDuckGo devolvió una respuesta vacía/no-JSON (posible bloqueo o rate limit). "
-            "Prueba otra consulta, espera un poco, o usa Wikipedia/read_url con una URL directa."
-        )
-    except Exception as e:
-        return f"Error en DuckDuckGo: {type(e).__name__}: {e}"
+
+def get_history(session_id: str):
+    if session_id not in _store:
+        _store[session_id] = []
+    return _store[session_id]
+
+
+def clear_session_memory(session_id: str) -> None:
+    _store.pop(session_id, None)
+
+
+def clear_all_memory() -> None:
+    _store.clear()
+
+
+def _build_web_search_tool(num_results: int):
+    ddg = DuckDuckGoSearchResults(num_results=num_results, backend="lite")
+
+    @tool
+    def web_search(query: str) -> str:
+        """Busca en la web con DuckDuckGo. Devuelve resultados (texto) aunque DDG falle."""
+        try:
+            return ddg.invoke(query)
+        except json.JSONDecodeError:
+            return (
+                "DuckDuckGo devolvio una respuesta vacia/no-JSON (posible bloqueo o rate limit). "
+                "Prueba otra consulta, espera un poco, o usa Wikipedia/read_url con una URL directa."
+            )
+        except Exception as e:
+            return f"Error en DuckDuckGo: {type(e).__name__}: {e}"
+
+    return web_search
 
 # ---------------- BUILD AGENT ----------------
 def build_agent(
@@ -108,9 +135,7 @@ def build_agent(
         api_wrapper=WikipediaAPIWrapper(top_k_results=5, doc_content_chars_max=4000)
     )
 
-    # Ajusta el num_results también en el ddg global (sin recrear el tool de LC)
-    global _ddg
-    _ddg = DuckDuckGoSearchResults(num_results=num_results, backend="lite")
+    web_search = _build_web_search_tool(num_results=num_results)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",
@@ -132,6 +157,7 @@ Process:
 3) Open 1–2 best links with read_url if the snippet isn’t enough (prefer reputable and/or recent sources).
 4) Use Wikipedia for definitions/background when appropriate.
 5) Answer clearly and include a short 'Sources:' list with the URLs you actually used/opened."""),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
@@ -142,7 +168,21 @@ Process:
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=verbose)
 
+    def _invoke_with_memory(payload: dict, config: dict = None):
+        user_input = payload.get("input", "")
+        session_id = "default"
+        if isinstance(config, dict):
+            session_id = config.get("configurable", {}).get("session_id", "default")
 
+        history = get_history(session_id)
+        res = agent_executor.invoke(
+            {"input": user_input, "chat_history": history},
+            config=config,
+        )
 
-    return agent_executor
+        answer = normalize_to_text(res.get("output", res)) if isinstance(res, dict) else normalize_to_text(res)
+        history.append(HumanMessage(content=str(user_input)))
+        history.append(AIMessage(content=answer))
+        return {"output": answer}
 
+    return RunnableLambda(_invoke_with_memory)
