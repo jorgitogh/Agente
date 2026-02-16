@@ -1,6 +1,8 @@
 # app.py
 import streamlit as st
 from agent import build_agent_with_memory
+from agent import build_agent_with_memory, normalize_to_text
+
 
 st.set_page_config(page_title="Gemini Web Research Agent", page_icon="🔎", layout="wide")
 st.title("🔎 Gemini 2.5 Flash — Web Research Agent")
@@ -77,13 +79,17 @@ else:
             with st.spinner("Buscando y razonando…"):
                 try:
                     res = st.session_state.agent.invoke(
-                        {"input": user_text},
-                        config={"configurable": {"session_id": st.session_state.session_id}},
-                    )
-                    answer = res.get("output", str(res))
+                    {"input": user_text},
+                    config={"configurable": {"session_id": st.session_state.session_id}},
+                )
+
+                    raw_output = res.get("output", res)
+                    answer = normalize_to_text(raw_output)
+
                     st.markdown(answer)
+
                 except Exception as e:
                     answer = f"⚠️ Error: {type(e).__name__}: {e}"
-                    st.error(answer)
+                st.error(answer)
 
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.session_state.messages.append({"role": "assistant", "content": answer})

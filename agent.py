@@ -16,6 +16,35 @@ from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 
+def normalize_to_text(x) -> str:
+    """Convierte salidas tipo LangChain/blocks a texto plano."""
+    # ya es str
+    if isinstance(x, str):
+        return x
+
+    # lista de bloques [{'type': 'text', 'text': '...'}, ...]
+    if isinstance(x, list):
+        parts = []
+        for item in x:
+            if isinstance(item, dict):
+                # el caso que tú muestras
+                if isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+                # otros formatos comunes
+                elif isinstance(item.get("content"), str):
+                    parts.append(item["content"])
+            else:
+                parts.append(str(item))
+        return "".join(parts)
+
+    # dict con 'output' o 'text'
+    if isinstance(x, dict):
+        if "output" in x:
+            return normalize_to_text(x["output"])
+        if "text" in x and isinstance(x["text"], str):
+            return x["text"]
+
+    return str(x)
 
 # ---------------- TOOLS ----------------
 @tool
