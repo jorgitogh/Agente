@@ -5,7 +5,7 @@ from agent import build_agent, clear_session_memory, normalize_to_text
 
 st.set_page_config(page_title="Gemini Web Research Agent", page_icon="🔎", layout="wide")
 st.title("🔎 Gemini 2.5 Flash — Web Research Agent")
-st.caption("DuckDuckGo + Wikipedia + read_url + today/now")
+st.caption("DuckDuckGo + Wikipedia + read_url + today/now + memory")
 
 # ---------------- Session state ----------------
 if "session_id" not in st.session_state:
