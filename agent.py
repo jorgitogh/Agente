@@ -53,9 +53,9 @@ def get_history(session_id: str) -> ChatMessageHistory:
 
 
 # ---------------- BUILD AGENT ----------------
-def build_agent_with_memory(api_key: str, num_results: int = 8, verbose: bool = False):
+def build_agent_with_memory(api_key: str, num_results: int = 8, verbose: bool = False, model: str = "gemini-2.5-flash"):
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=model,
         api_key=api_key,
         temperature=0.2,
     )
