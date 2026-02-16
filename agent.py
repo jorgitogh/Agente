@@ -90,18 +90,8 @@ def web_search(query: str) -> str:
     except Exception as e:
         return f"Error en DuckDuckGo: {type(e).__name__}: {e}"
 
-
-# ---------------- MEMORY STORE ----------------
-_store = {}
-
-def get_history(session_id: str) -> ChatMessageHistory:
-    if session_id not in _store:
-        _store[session_id] = ChatMessageHistory()
-    return _store[session_id]
-
-
 # ---------------- BUILD AGENT ----------------
-def build_agent_with_memory(
+def build_agent(
     api_key: str,
     num_results: int = 8,
     verbose: bool = False,
@@ -152,12 +142,7 @@ Process:
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=verbose)
 
-    agent_with_memory = RunnableWithMessageHistory(
-        agent_executor,
-        get_history,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-    )
 
-    return agent_with_memory
+
+    return agent_executor
 
