@@ -1,7 +1,7 @@
 # app.py
 import streamlit as st
-from agent import build_agent_with_memory
-from agent import build_agent_with_memory, normalize_to_text
+from agent import build_agent
+from agent import build_agent, normalize_to_text
 
 
 st.set_page_config(page_title="Gemini Web Research Agent", page_icon="🔎", layout="wide")
@@ -38,7 +38,7 @@ with st.sidebar:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🧠 (Re)crear agente", use_container_width=True, disabled=not api_key):
-            st.session_state.agent = build_agent_with_memory(
+            st.session_state.agent = build_agent(
                 api_key=api_key,
                 num_results=num_results,
                 verbose=verbose,
@@ -52,7 +52,7 @@ with st.sidebar:
 
 # Autocrear agente si hay key y aún no hay agente
 if st.session_state.agent is None and st.session_state.api_key:
-    st.session_state.agent = build_agent_with_memory(
+    st.session_state.agent = build_agent(
         api_key=st.session_state.api_key,
         num_results=8,
         verbose=False,
