@@ -7,9 +7,8 @@ from zoneinfo import ZoneInfo
 
 from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnableLambda
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.messages import HumanMessage, AIMessage
 
 from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
@@ -95,9 +94,9 @@ def web_search(query: str) -> str:
 # ---------------- MEMORY STORE ----------------
 _store = {}
 
-def get_history(session_id: str) -> ChatMessageHistory:
+def get_history(session_id: str):
     if session_id not in _store:
-        _store[session_id] = ChatMessageHistory()
+        _store[session_id] = []
     return _store[session_id]
 
 
@@ -153,20 +152,26 @@ Process:
 
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=verbose)
-    agent_executor_text_output = agent_executor | RunnableLambda(
-        lambda res: {
-            "output": normalize_to_text(res.get("output", res))
+
+    def _invoke_with_memory(payload: dict, config: dict = None):
+        user_input = payload.get("input", "")
+        session_id = "default"
+        if isinstance(config, dict):
+            session_id = config.get("configurable", {}).get("session_id", "default")
+
+        history = get_history(session_id)
+        res = agent_executor.invoke(
+            {"input": user_input, "chat_history": history},
+            config=config,
+        )
+        output_text = (
+            normalize_to_text(res.get("output", res))
             if isinstance(res, dict)
             else normalize_to_text(res)
-        }
-    )
+        )
 
-    agent_with_memory = RunnableWithMessageHistory(
-        agent_executor_text_output,
-        get_history,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-        output_messages_key="output",
-    )
+        history.append(HumanMessage(content=str(user_input)))
+        history.append(AIMessage(content=output_text))
+        return {"output": output_text}
 
-    return agent_with_memory
+    return RunnableLambda(_invoke_with_memory)
