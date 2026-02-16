@@ -142,6 +142,7 @@ Process:
 3) Open 1–2 best links with read_url if the snippet isn’t enough (prefer reputable and/or recent sources).
 4) Use Wikipedia for definitions/background when appropriate.
 5) Answer clearly and include a short 'Sources:' list with the URLs you actually used/opened."""),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
