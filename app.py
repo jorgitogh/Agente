@@ -64,32 +64,33 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
+# ... arriba mantienes el render del historial tal cual ...
+
 disabled_chat = (not st.session_state.api_key) or (st.session_state.agent is None)
 
 if disabled_chat:
     st.info("Introduce tu GOOGLE_API_KEY en la barra lateral para empezar.")
 else:
     user_text = st.chat_input("Pregunta algo…")
+
     if user_text:
+        # 1) guarda mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": user_text})
-        with st.chat_message("user"):
-            st.markdown(user_text)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Buscando y razonando…"):
-                try:
-                    res = st.session_state.agent.invoke(
-                    {"input": user_text},
-                    config={"configurable": {"session_id": st.session_state.session_id}},
-                )
+        # 2) calcula respuesta
+        try:
+            res = st.session_state.agent.invoke(
+                {"input": user_text},
+                config={"configurable": {"session_id": st.session_state.session_id}},
+            )
+            from agent import normalize_to_text  # o impórtalo arriba del todo
+            answer = normalize_to_text(res.get("output", res))
 
-                    raw_output = res.get("output", res)
-                    answer = normalize_to_text(raw_output)
+        except Exception as e:
+            answer = f"⚠️ Error: {type(e).__name__}: {e}"
 
-                    st.markdown(answer)
+        # 3) guarda respuesta del assistant
+        st.session_state.messages.append({"role": "assistant", "content": answer})
 
-                except Exception as e:
-                    answer = f"⚠️ Error: {type(e).__name__}: {e}"
-                st.error(answer)
-
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+        # 4) re-render en limpio (evita duplicados)
+        st.rerun()
